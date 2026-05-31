@@ -1,181 +1,126 @@
 import pytest
 
-from sonda_marte_api.servicos.probe import ComandoInvalido, saiuForaDosLimites, Probe, cria_probe, executa_comandos
+from sonda_marte_api.servicos.probe import (
+    InvalidCommand,
+    Probe,
+    WentOutOfLimit,
+    execute_commands,
+)
 
 
 def make_probe(**kwargs) -> Probe:
-    #cria uma sonda com valores padrão para facilitar os testes.
-    defaults = {"id": "test-id", "max_x": 5, "max_y": 5, "direction": "NORTH"}
-    return cria_probe(**{**defaults, **kwargs})
+    """Cria uma sonda com valores padrão, permitindo sobrescrevê-los via kwargs"""
+    defaults = {"id": "test-id", "x": 0, "y": 0, "max_x": 5, "max_y": 5, "direction": "NORTH"}
+    return Probe(**{**defaults, **kwargs})
 
 
-class TestCriarProbe:
-    def test_comeca_na_posicao_zero(self):
-        sonda = make_probe()
+class TestProbeCreation:
+    def test_starts_at_given_position(self):
+        probe = make_probe(x=0, y=0)
+        assert probe.x == 0 and probe.y == 0
 
-        assert sonda.x == 0
-        assert sonda.y == 0
+    def test_stores_initial_direction(self):
+        probe = make_probe(direction="EAST")
+        assert probe.direction == "EAST"
 
-    def test_recebe_direcao_inicial(self):
-        sonda = make_probe(direction="EAST")
-
-        assert sonda.direction == "EAST"
-
-    def test_limites_da_malha(self):
-        sonda = make_probe(max_x=10, max_y=8)
-
-        assert sonda.max_x == 10
-        assert sonda.max_y == 8
+    def test_stores_grid_limits(self):
+        probe = make_probe(max_x=10, max_y=8)
+        assert probe.max_x == 10 and probe.max_y == 8
 
 
-class TestRotacaoEsquerda:
-    def test_norte_vira_oeste(self):
-        sonda = make_probe(direction="NORTH")
-        executa_comandos(sonda, "L")
-        assert sonda.direction == "WEST"
+class TestTurnLeft:
+    @pytest.mark.parametrize("initial, expected", [
+        ("NORTH", "WEST"),
+        ("WEST", "SOUTH"),
+        ("SOUTH", "EAST"),
+        ("EAST", "NORTH"),
+    ])
+    def test_single_left_turn(self, initial, expected):
+        probe = execute_commands(make_probe(direction=initial), "L")
+        assert probe.direction == expected
 
-    def test_oeste_vira_sul(self):
-        sonda = make_probe(direction="WEST")
-        executa_comandos(sonda, "L")
-        assert sonda.direction == "SOUTH"
-
-    def test_sul_vira_leste(self):
-        sonda = make_probe(direction="SOUTH")
-        executa_comandos(sonda, "L")
-        assert sonda.direction == "EAST"
-
-    def test_leste_vira_norte(self):
-        sonda = make_probe(direction="EAST")
-        executa_comandos(sonda, "L")
-        assert sonda.direction == "NORTH"
-
-    def test_quatro_rotacoes_direcao_original(self):
-        sonda = make_probe(direction="NORTH")
-        executa_comandos(sonda, "LLLL")
-        assert sonda.direction == "NORTH"
+    def test_four_left_turns_returns_to_original(self):
+        probe = execute_commands(make_probe(direction="NORTH"), "LLLL")
+        assert probe.direction == "NORTH"
 
 
-class TestRotacaoDireita:
-    def test_norte_vira_leste(self):
-        sonda = make_probe(direction="NORTH")
-        executa_comandos(sonda, "R")
-        assert sonda.direction == "EAST"
+class TestTurnRight:
+    @pytest.mark.parametrize("initial, expected", [
+        ("NORTH", "EAST"),
+        ("EAST", "SOUTH"),
+        ("SOUTH", "WEST"),
+        ("WEST", "NORTH"),
+    ])
+    def test_single_right_turn(self, initial, expected):
+        probe = execute_commands(make_probe(direction=initial), "R")
+        assert probe.direction == expected
 
-    def test_leste_vira_sul(self):
-        sonda = make_probe(direction="EAST")
-        executa_comandos(sonda, "R")
-        assert sonda.direction == "SOUTH"
-
-    def test_sul_vira_oeste(self):
-        sonda = make_probe(direction="SOUTH")
-        executa_comandos(sonda, "R")
-        assert sonda.direction == "WEST"
-
-    def test_oeste_vira_norte(self):
-        sonda = make_probe(direction="WEST")
-        executa_comandos(sonda, "R")
-        assert sonda.direction == "NORTH"
-
-    def test_quatro_rotacoes_direcao_original(self):
-        sonda = make_probe(direction="NORTH")
-        executa_comandos(sonda, "RRRR")
-        assert sonda.direction == "NORTH"
+    def test_four_right_turns_returns_to_original(self):
+        probe = execute_commands(make_probe(direction="NORTH"), "RRRR")
+        assert probe.direction == "NORTH"
 
 
+class TestMovement:
+    @pytest.mark.parametrize("direction, start_x, start_y, exp_x, exp_y", [
+        ("NORTH", 0, 0, 0, 1),
+        ("SOUTH", 0, 3, 0, 2),
+        ("EAST",  0, 0, 1, 0),
+        ("WEST",  3, 0, 2, 0),
+    ])
+    def test_moves_in_correct_direction(self, direction, start_x, start_y, exp_x, exp_y):
+        probe = make_probe(direction=direction)
+        probe.x, probe.y = start_x, start_y
+        result = execute_commands(probe, "M")
+        assert result.x == exp_x and result.y == exp_y
 
-class TestMovimento:
-    def test_move_para_norte(self):
-        sonda = make_probe(direction="NORTH")
-        executa_comandos(sonda, "M")
-        assert sonda.x == 0 and sonda.y == 1
 
-    def test_move_para_sul(self):
-        sonda = cria_probe(id="t", max_x=5, max_y=5, direction="SOUTH")
-        sonda.y = 3
-        executa_comandos(sonda, "M")
-        assert sonda.x == 0 and sonda.y == 2
-
-    def test_move_para_leste(self):
-        sonda = make_probe(direction="EAST")
-        executa_comandos(sonda, "M")
-        assert sonda.x == 1 and sonda.y == 0
-
-    def test_move_para_oeste(self):
-        sonda = cria_probe(id="t", max_x=5, max_y=5, direction="WEST")
-        sonda.x = 3
-        executa_comandos(sonda, "M")
-        assert sonda.x == 2 and sonda.y == 0
-
-class TestSequenciaDeComandos:
-    def test_sequencia(self):
+class TestCommandSequence:
+    def test_mrm_from_origin_north(self):
         """Caso do enunciado: MRM partindo de (0,0,NORTH) → (1,1,EAST)."""
-        sonda = make_probe(direction="NORTH")
-        executa_comandos(sonda, "MRM")
-        assert sonda.x == 1
-        assert sonda.y == 1
-        assert sonda.direction == "EAST"
+        probe = execute_commands(make_probe(direction="NORTH"), "MRM")
+        assert probe.x == 1 and probe.y == 1 and probe.direction == "EAST"
 
-    def test_rotacao_nao_altera_posicao(self):
-        sonda = make_probe(direction="NORTH")
-        executa_comandos(sonda, "LRLR")
-        assert sonda.x == 0
-        assert sonda.y == 0
+    def test_rotations_do_not_change_position(self):
+        probe = execute_commands(make_probe(direction="NORTH"), "LRLR")
+        assert probe.x == 0 and probe.y == 0
 
 
-class TestValidacaoDeLimites:
-    def test_sonda_nao_sai_pelo_norte(self):
-        sonda = cria_probe(id="t", max_x=5, max_y=5, direction="NORTH")
-        sonda.y = 5
-        with pytest.raises(saiuForaDosLimites):
-            executa_comandos(sonda, "M")
+class TestBoundaryValidation:
+    @pytest.mark.parametrize("direction, start_x, start_y", [
+        ("NORTH", 0, 5),
+        ("SOUTH", 0, 0),
+        ("EAST",  5, 0),
+        ("WEST",  0, 0),
+    ])
+    def test_raises_when_exceeding_boundary(self, direction, start_x, start_y):
+        probe = make_probe(direction=direction)
+        probe.x, probe.y = start_x, start_y
+        with pytest.raises(WentOutOfLimit):
+            execute_commands(probe, "M")
 
-    def test_sonda_nao_sai_pelo_sul(self):
-        sonda = make_probe(direction="SOUTH")
-        with pytest.raises(saiuForaDosLimites):
-            executa_comandos(sonda, "M")
+    def test_position_unchanged_after_out_of_bounds(self):
+        probe = make_probe(direction="NORTH")
+        probe.y = 5
+        with pytest.raises(WentOutOfLimit):
+            execute_commands(probe, "MMMM")
+        assert probe.x == 0 and probe.y == 5
 
-    def test_sonda_nao_sai_pelo_leste(self):
-        sonda = cria_probe(id="t", max_x=5, max_y=5, direction="EAST")
-        sonda.x = 5
-        with pytest.raises(saiuForaDosLimites):
-            executa_comandos(sonda, "M")
-
-    def test_sonda_nao_sai_pelo_oeste(self):
-        sonda = make_probe(direction="WEST")
-        with pytest.raises(saiuForaDosLimites):
-            executa_comandos(sonda, "M")
-
-    def test_sequencia_invalida(self):
-        #Se qualquer comando causar saída dos limites, a sonda não deve se mover.
-        sonda = make_probe(direction="NORTH")
-        sonda.y = 5
-
-        with pytest.raises(saiuForaDosLimites):
-            executa_comandos(sonda, "MMMM")
-
-        assert sonda.x == 0
-        assert sonda.y == 5
-
-    def test_sonda_atinge_limites_sem_ultrapassar(self):
-        sonda = make_probe(direction="NORTH", max_x=5, max_y=5)
-        executa_comandos(sonda, "MMMMM")
-        assert sonda.y == 5
+    def test_reaches_limit_without_exceeding(self):
+        result = execute_commands(make_probe(direction="NORTH"), "MMMMM")
+        assert result.y == 5
 
 
-class TestComandosInvalidos:
-    def test_caractere_invalido(self):
-        sonda = make_probe()
-        with pytest.raises(ComandoInvalido):
-            executa_comandos(sonda, "MXM")
+class TestInvalidCommands:
+    def test_raises_on_unknown_character(self):
+        with pytest.raises(InvalidCommand):
+            execute_commands(make_probe(), "MXM")
 
-    def test_comando_invalido(self):
-        sonda = make_probe(direction="NORTH")
-        with pytest.raises(ComandoInvalido):
-            executa_comandos(sonda, "MZM")
-        assert sonda.x == 0
-        assert sonda.y == 0
+    def test_position_unchanged_after_invalid_command(self):
+        probe = make_probe(direction="NORTH")
+        with pytest.raises(InvalidCommand):
+            execute_commands(probe, "MZM")
+        assert probe.x == 0 and probe.y == 0
 
-    def test_aceita_comandos_minusculo(self):
-        sonda = make_probe()
-        with pytest.raises(ComandoInvalido):
-            executa_comandos(sonda, "m")
+    def test_accepts_lowercase_commands(self):
+        result = execute_commands(make_probe(), "m")
+        assert result.y == 1
