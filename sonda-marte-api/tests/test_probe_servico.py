@@ -1,6 +1,6 @@
 import pytest
 
-from sonda_marte_api.servicos.probe import (
+from sonda_marte_api.service.probe import (
     InvalidCommand,
     Probe,
     WentOutOfLimit,

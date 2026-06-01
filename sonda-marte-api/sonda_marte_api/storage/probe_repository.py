@@ -8,7 +8,7 @@ mantendo a compatibilidade com a interface pública definida pelo repositório.
 
 from uuid import uuid4
 
-from sonda_marte_api.servicos.probe import Probe
+from sonda_marte_api.service.probe import Probe
 
 _probes: dict[str, Probe] = {}
 
